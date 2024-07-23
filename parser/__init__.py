@@ -76,11 +76,12 @@ program = ~statement
 if __name__ == "__main__":
     print(program.parse_or_raise("skip;"))
     print(program.parse_or_raise("x := (50 * y) + 7;"))
-    print(program.parse_or_raise("""
-    if x > y then { 
+    test_prog = program.parse_or_raise("""
+    if x > y + 1 then { 
         x := (50 * y) + 7; 
         y := x;
     } else 
         skip; 
     end
-    """))
+    """)
+    print(test_prog)
