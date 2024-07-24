@@ -1,34 +1,83 @@
+import copy
+
 import parser
 import models
 import z3
 import re
 
 
-def loopless_verifier(cond,code):
-    for i in reversed(code):
-        x = 6
-    return 0
-
-
 def calculate_wlp(post_condition, code):
-    if 'variable' in dir(code):
+    """ given a loopless list (or singular) of code, and a post_condition (boolean expression)
+    this function calculates the weakest liberal precondition necessary for that postcondition after the code runs
+    :param post_condition: Boolean Expression
+    :param code: instruction or list of instructions
+    :return: None
+    """
+    if isinstance(code, list):
+        for i in reversed(code):
+            calculate_wlp(post_condition, i)
+    elif code is None:
+        return
+    elif 'variable' in dir(code):
         calculate_assignment_wlp(post_condition,code)
     elif 'if_true' in dir(code):
-        calculate_if_wlp(post_condition,code)
+        calculate_if_wlp(post_condition, code)
     return
 
 
-def calculate_if_wlp(post_condition, code): #  TODO: figure out deep copies
+def calculate_if_wlp(post_condition, code):
+    """ given an If block of code and a wanted postcondition, this function calculates the wlp necessary
+    :param post_condition: condition (comparison or boolean expression)
+    :param code: If block
+    :return: None
+    """
     leftcond = parse_as_condition("a<b && a<b")
     leftcond.left = code.condition
-    leftcond.right = calculate_wlp(post_condition,code.if_true)
+    leftcond.right = copy.deepcopy(post_condition)
+    calculate_wlp(leftcond.right, code.if_true)
     rightcond = parse_as_condition("a<b && a<b")
-    rightcond.left = "placeholder"  #  TODO: figure out negation
-    rightcond.right = calculate_wlp(post_condition,code.if_false)
+    rightcond.left = copy.deepcopy(code.condition)
+    condition_negation(rightcond.left)
+    rightcond.right = copy.deepcopy(post_condition)
+    calculate_wlp(rightcond.right, code.if_false)
     post_condition.left = leftcond
     post_condition.right = rightcond
     post_condition.op = "||"
     return
+
+
+def condition_negation(cond):
+    """ given a condition (comparison or boolean expression) this function negates it in place
+    :param cond:
+    :return:
+    """
+    if cond.op in ["<", "<=", ">=", ">", "=", "!="]:
+        cond.op = neg_op(cond.op)
+        return
+    if cond.op == "&&":
+        cond.op = "||"
+    else:
+        cond.op = "&&"
+    condition_negation(cond.left)
+    condition_negation(cond.right)
+    return
+
+
+def neg_op(op):
+    if op == "<":
+        return ">="
+    elif op == "<=":
+        return ">"
+    elif op == ">=":
+        return "<"
+    elif op == ">":
+        return "<="
+    elif op == "=":
+        return "!="
+    elif op == "!=":
+        return "="
+    print("not a legal op")
+    return ""
 
 
 def calculate_assignment_wlp(post_condition, assignment):
@@ -36,29 +85,12 @@ def calculate_assignment_wlp(post_condition, assignment):
     return
 
 
-def find_closing_par(s, ind):
-    counter = 1
-    if ~s[ind].equals("("):
-        print("false index given")
-        return -1
-    while ind < len(s):
-        if s[ind].equals('('):
-            counter += 1
-        elif s[ind].equals(')'):
-            counter -= 1
-            if counter == 0:
-                return ind
-        ind += 1
-    print("no closing parenthesis found, illegal string given")
-    return -1
-
-
 def replace_id_with_exp(obj, id, new):  # replaces all instances of id[=Identifier(name='...')] with new
     for i in attribute_list(obj):  # for each attribute
         j = getattr(obj, i)
         if j == id:  # replace it if it's the variable
             setattr(obj, i, new)
-        elif '__dataclass_fields__' in dir(obj):  # call recursively if applicable
+        elif '__dataclass_fields__' in dir(j):  # call recursively if applicable
             replace_id_with_exp(j, id, new)
     return
 
