@@ -85,13 +85,13 @@ def calculate_assignment_wlp(post_condition, assignment):
     return
 
 
-def replace_id_with_exp(obj, id, new):  # replaces all instances of id[=Identifier(name='...')] with new
+def replace_id_with_exp(obj, iden, new):  # replaces all instances of id[=Identifier(name='...')] with new
     for i in attribute_list(obj):  # for each attribute
         j = getattr(obj, i)
-        if j == id:  # replace it if it's the variable
+        if j == iden:  # replace it if it's the variable
             setattr(obj, i, new)
         elif '__dataclass_fields__' in dir(j):  # call recursively if applicable
-            replace_id_with_exp(j, id, new)
+            replace_id_with_exp(j, iden, new)
     return
 
 
@@ -108,3 +108,94 @@ def parse_as_condition(s):
         skip;
     end
     """)[0].condition
+
+
+def test_condition(cond):
+    """
+    given a condition it tests if that condition is satisfiable with z3
+    :param cond:
+    :return:
+    """
+    variables = find_variables_envelope(cond)
+    a = [i for i in range(len(variables))]
+    b = list(variables)
+    for i in range(len(a)):
+        a[i] = z3.Int(b[i])
+    solver = z3.Solver()
+    s = exp_to_string(cond, b)
+    eval("solver.add(" + s + ")")
+    return solver.check()
+
+
+def find_variables_envelope(obj):
+    names = set()
+    find_variables_rec(obj, names)
+    return names
+
+
+def find_variables_rec(obj, names):
+    for i in attribute_list(obj):  # for each attribute
+        j = getattr(obj, i)
+        if i == 'name':  # add it if it's a name
+            names.add(obj.name)
+        elif '__dataclass_fields__' in dir(j):  # call recursively if applicable
+            find_variables_rec(j, names)
+    return
+
+
+def exp_to_string(exp, a):
+    if exp is None:
+        return ""
+    if isinstance(exp, int):
+        return str(exp)
+    attributes = attribute_list(exp)
+    if 'name' in attributes:
+        return "a[" + str(a.index(exp.name)) + "]"
+    if 'op' in attributes:
+        if exp.op == "&&":
+            return "z3.And(" + exp_to_string(exp.left, a) + ", " + exp_to_string(exp.right, a) + ")"
+        elif exp.op == "||":
+            return "z3.Or(" + exp_to_string(exp.left, a) + ", " + exp_to_string(exp.right, a) + ")"
+        else:
+            return "(" + exp_to_string(exp.left, a) + " " + op_to_z3op(exp.op) + " " + exp_to_string(exp.right, a) + ")"
+    return 'default'
+
+
+def op_to_z3op(op):
+    if op == '=':
+        return '=='
+    return op
+
+
+def verify_code(code,postcondition):
+    """given code and a desired postcondition, returns weather the postcondition is always satisfied
+    :param code: str
+    :param postcondition: str
+    :return:
+    """
+    cond = parse_as_condition(postcondition)
+    calculate_wlp(cond, code)
+    condition_negation(cond)
+    s = test_condition(parse_as_condition("1>0"))
+    k = test_condition(cond)
+    if k == s:  # if we found a way for the post_condition to not be satisfied, that means the code isn't valid
+        return False
+    else:
+        return True
+
+
+
+
+"""def toz3(cond, a):
+    
+    :param cond: the condition in model
+    :param a: the list of z3 variables
+    :return: a z3 condition
+   
+    if cond.op == '||':
+        return z3.Or(toz3(cond.left, a), toz3(cond.right, a))
+    elif cond.op == '&&':
+        return z3.And(toz3(cond.left, a), toz3(cond.right, a))
+    elif cond.op in ["<", "<=", ">=", ">", "=", "!="]:
+        
+    return"""
