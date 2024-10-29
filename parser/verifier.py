@@ -13,16 +13,60 @@ def calculate_wlp(post_condition, code):
     :param code: instruction or list of instructions
     :return: None
     """
+    k = 0
     if isinstance(code, list):
         for i in reversed(code):
-            calculate_wlp(post_condition, i)
+            k += calculate_wlp(post_condition, i)
     elif code is None:
         return
     elif 'variable' in dir(code):
-        calculate_assignment_wlp(post_condition,code)
+        calculate_assignment_wlp(post_condition, code)
     elif 'if_true' in dir(code):
-        calculate_if_wlp(post_condition, code)
-    return
+        k += calculate_if_wlp(post_condition, code)
+    elif 'body' in dir(code):
+        k += calculate_while_wlp(post_condition, code)
+    return k
+
+
+def calculate_while_wlp(post_condition, code):
+    """
+    given a loop invariant P, body of loop c and loop condition b and postcondition Q we can calculate the precondition
+    to be (in logical notaion)
+    P AND ForAll vars (((P AND b) -> wlp[c]P) AND ((P AND NOT b) -> Q))
+    this is logically equivalent to:
+    P AND ForAll vars (( NOT(P AND b) Or wlp[c]P) AND ((NOT P) Or b Or Q))
+    we test the forall part by negating it and checking satisfiability, and only pass on P as the WLP
+    :param post_condition:
+    :param code:
+    :return:
+    """
+    condition = code.condition
+    inp = input("what is the loop invariant for the loop with the condition '" + exp_to_string_no_a(condition) + "'?\n")
+    inv = parse_as_condition(inp)
+    wlp_c = copy.deepcopy(inv)
+    calculate_wlp(wlp_c, code.body)
+    q = copy.deepcopy(post_condition)
+    mass_cond = parse_as_condition("(1>1) && (((1>1 && 2>2) && c>c) && ((1>1 && 2>2) && 3>3))")
+    mass_cond.left = copy.deepcopy(inv)
+    mass_cond.right.left.left.left = copy.deepcopy(inv)
+    mass_cond.right.left.left.right = copy.deepcopy(condition)
+    condition_negation(mass_cond.right.left.left)
+    mass_cond.right.left.op = "||"
+    mass_cond.right.left.right = wlp_c
+    notp = copy.deepcopy(inv)
+    condition_negation(notp)
+    mass_cond.right.right.left.left = notp
+    mass_cond.right.right.left.op = "||"
+    mass_cond.right.right.left.right = copy.deepcopy(condition)
+    mass_cond.right.right.right = q
+    mass_cond.right.right.op = "||"
+    forall_cond = mass_cond.right
+    condition_negation(forall_cond)
+    k = test_condition(forall_cond) == test_condition(parse_as_condition("1>0"))
+    post_condition.left = inv.left
+    post_condition.right = inv.right
+    post_condition.op = inv.op
+    return k
 
 
 def calculate_if_wlp(post_condition, code):
@@ -31,19 +75,20 @@ def calculate_if_wlp(post_condition, code):
     :param code: If block
     :return: None
     """
+    k = 0
     leftcond = parse_as_condition("a<b && a<b")
     leftcond.left = code.condition
     leftcond.right = copy.deepcopy(post_condition)
-    calculate_wlp(leftcond.right, code.if_true)
+    k += calculate_wlp(leftcond.right, code.if_true)
     rightcond = parse_as_condition("a<b && a<b")
     rightcond.left = copy.deepcopy(code.condition)
     condition_negation(rightcond.left)
     rightcond.right = copy.deepcopy(post_condition)
-    calculate_wlp(rightcond.right, code.if_false)
+    k += calculate_wlp(rightcond.right, code.if_false)
     post_condition.left = leftcond
     post_condition.right = rightcond
     post_condition.op = "||"
-    return
+    return k
 
 
 def condition_negation(cond):
@@ -161,6 +206,24 @@ def exp_to_string(exp, a):
     return 'default'
 
 
+def exp_to_string_no_a(exp):
+    if exp is None:
+        return ""
+    if isinstance(exp, int):
+        return str(exp)
+    attributes = attribute_list(exp)
+    if 'name' in attributes:
+        return exp.name
+    if 'op' in attributes:
+        if exp.op == "&&":
+            return "(" + exp_to_string_no_a(exp.left) + " && " + exp_to_string_no_a(exp.right) + ")"
+        elif exp.op == "||":
+            return "(" + exp_to_string_no_a(exp.left) + " || " + exp_to_string_no_a(exp.right) + ")"
+        else:
+            return exp_to_string_no_a(exp.left) + " " + exp.op + " " + exp_to_string_no_a(exp.right)
+    return 'default'
+
+
 def op_to_z3op(op):
     if op == '=':
         return '=='
@@ -174,7 +237,9 @@ def verify_code(code,postcondition):
     :return:
     """
     cond = parse_as_condition(postcondition)
-    calculate_wlp(cond, code)
+    a = calculate_wlp(cond, code)
+    if a > 0:
+        return False
     condition_negation(cond)
     s = test_condition(parse_as_condition("1>0"))
     k = test_condition(cond)
@@ -186,16 +251,11 @@ def verify_code(code,postcondition):
 
 
 
-"""def toz3(cond, a):
+"""def to_text(obj, a): #TODO implement
     
-    :param cond: the condition in model
-    :param a: the list of z3 variables
-    :return: a z3 condition
-   
     if cond.op == '||':
         return z3.Or(toz3(cond.left, a), toz3(cond.right, a))
     elif cond.op == '&&':
         return z3.And(toz3(cond.left, a), toz3(cond.right, a))
     elif cond.op in ["<", "<=", ">=", ">", "=", "!="]:
-        
-    return"""
+        return"""
