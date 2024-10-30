@@ -21,46 +21,43 @@ code2 = parser.program.parse_or_raise("""
     end
 """)
 
-t1 = parser.program.parse_or_raise("""
-    if y < 0 then{
-        f := -1;
-        y := 0 - y;
-    }else
-        f := 1;
-    end
-""")
-
-t2 = parser.program.parse_or_raise("""
-    while y > 0 do{
-        a := a + x;
-        y := y - 1;
-    end
-""")
-
-t3 = parser.program.parse_or_raise("""
-    if f < 0 then{
-        a := 0 - a;
-    }else
-        skip;
-    end
-""")
-
 code3 = parser.program.parse_or_raise("""
-    x := z;
-    y := w;
+    x := 5;
+    z := 0;
+    while x != 0 do{
+    x := x-1;
+    z := z+5;
+    }end
+""")
+
+code4 = parser.program.parse_or_raise("""
+    x := 7;
+    y := 13;
+    z := 21;
     a := 0;
-    if y < 0 then{
-        while y != 0 do{
-            a := a - x;
-            y := y + 1;
+    if x > y then{
+        if y > z then{
+            a := 6;
+        }else{
+            if z > y then{
+                a := 7;
+            }else{
+                a := 8;
+            }end
         }end
     }else{
-        while y != 0 do{
-            a := a + x;
-            y := y - 1;
+        if x > z then{
+            a := 9;
+        }else{
+            if y > z then{
+                a := 10;
+            }else{
+                a := 11;
+            }end
         }end
     }end
 """)
-t = verifier.parse_as_condition("(a + (y * z)) = w*z")
-k = verifier.verify_code(code3, "a = z*w")
+
+
+k = verifier.verify_code(code4, "a=11")
 print(k)
