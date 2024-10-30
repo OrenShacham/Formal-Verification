@@ -4,7 +4,6 @@ import parser
 import models
 import z3
 import re
-global forall_cond
 
 
 def calculate_wlp(post_condition, code):
@@ -14,31 +13,22 @@ def calculate_wlp(post_condition, code):
     :param code: instruction or list of instructions
     :return: None
     """
-    global forall_cond
+    k = 0
     if isinstance(code, list):
         for i in reversed(code):
-            calculate_wlp(post_condition, i)
+            k += calculate_wlp(post_condition, i)
     elif code is None:
         return 0
     elif 'variable' in dir(code):
-        for j in range(len(forall_cond)):
-            calculate_assignment_wlp(forall_cond[j], code)
         calculate_assignment_wlp(post_condition, code)
     elif 'if_true' in dir(code):
-        for j in range(len(forall_cond)):
-            calculate_if_wlp(forall_cond[j], code)
-        calculate_if_wlp(post_condition, code)
+        k += calculate_if_wlp(post_condition, code)
     elif 'body' in dir(code):
-        t = len(forall_cond)
-        inp = input("what is the loop invariant for the loop with the condition '" + exp_to_string_no_a(code.condition) + "'?\n")
-        inv = parse_as_condition(inp)
-        for j in range(t):
-            calculate_while_wlp(forall_cond[j], code, inv, False)
-        calculate_while_wlp(post_condition, code, inv, True)
-    return
+        k += calculate_while_wlp(post_condition, code)
+    return k
 
 
-def calculate_while_wlp(post_condition, code, inv, append_flag):
+def calculate_while_wlp(post_condition, code):
     """
     given a loop invariant P, body of loop c and loop condition b and postcondition Q we can calculate the precondition
     to be (in logical notaion)
@@ -51,6 +41,8 @@ def calculate_while_wlp(post_condition, code, inv, append_flag):
     :return:
     """
     condition = code.condition
+    inp = input("what is the loop invariant for the loop with the condition '" + exp_to_string_no_a(condition) + "'?\n")
+    inv = parse_as_condition(inp)
     wlp_c = copy.deepcopy(inv)
     calculate_wlp(wlp_c, code.body)
     q = copy.deepcopy(post_condition)
@@ -68,13 +60,13 @@ def calculate_while_wlp(post_condition, code, inv, append_flag):
     mass_cond.right.right.left.right = copy.deepcopy(condition)
     mass_cond.right.right.right = q
     mass_cond.right.right.op = "||"
-    if append_flag:
-        global forall_cond
-        forall_cond.append(mass_cond.right)
+    forall_cond = mass_cond.right
+    condition_negation(forall_cond)
+    k = test_condition(forall_cond) == test_condition(parse_as_condition("1>0"))
     post_condition.left = inv.left
     post_condition.right = inv.right
     post_condition.op = inv.op
-    return
+    return k
 
 
 def calculate_if_wlp(post_condition, code):
@@ -83,19 +75,20 @@ def calculate_if_wlp(post_condition, code):
     :param code: If block
     :return: None
     """
+    k = 0
     leftcond = parse_as_condition("a<b && a<b")
     leftcond.left = code.condition
     leftcond.right = copy.deepcopy(post_condition)
-    calculate_wlp(leftcond.right, code.if_true)
+    k += calculate_wlp(leftcond.right, code.if_true)
     rightcond = parse_as_condition("a<b && a<b")
     rightcond.left = copy.deepcopy(code.condition)
     condition_negation(rightcond.left)
     rightcond.right = copy.deepcopy(post_condition)
-    calculate_wlp(rightcond.right, code.if_false)
+    k += calculate_wlp(rightcond.right, code.if_false)
     post_condition.left = leftcond
     post_condition.right = rightcond
     post_condition.op = "||"
-    return
+    return k
 
 
 def condition_negation(cond):
@@ -138,13 +131,10 @@ def calculate_assignment_wlp(post_condition, assignment):
 
 
 def replace_id_with_exp(obj, iden, new):  # replaces all instances of id[=Identifier(name='...')] with new
-    # print("replacing identifie with " + exp_to_string_no_a(new) + " in " + exp_to_string_no_a(obj))
-    if (exp_to_string_no_a(new) == 'y - 1') & (exp_to_string_no_a(obj) == 'y - 1'):
-        x=5
     for i in attribute_list(obj):  # for each attribute
         j = getattr(obj, i)
         if j == iden:  # replace it if it's the variable
-            setattr(obj, i, copy.deepcopy(new))
+            setattr(obj, i, new)
         elif '__dataclass_fields__' in dir(j):  # call recursively if applicable
             replace_id_with_exp(j, iden, new)
     return
@@ -246,17 +236,12 @@ def verify_code(code,postcondition):
     :param postcondition: str
     :return:
     """
-    global forall_cond
-    forall_cond = []
     cond = parse_as_condition(postcondition)
-    calculate_wlp(cond, code)
-    s = test_condition(parse_as_condition("1>0"))
-    for j in range(len(forall_cond)):
-        condition_negation(forall_cond[j])
-        k = test_condition(forall_cond[j])
-        if k == s:
-            return False
+    a = calculate_wlp(cond, code)
+    if a > 0:
+        return False
     condition_negation(cond)
+    s = test_condition(parse_as_condition("1>0"))
     k = test_condition(cond)
     if k == s:  # if we found a way for the post_condition to not be satisfied, that means the code isn't valid
         return False
