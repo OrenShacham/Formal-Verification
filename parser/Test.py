@@ -49,18 +49,45 @@ code3 = parser.program.parse_or_raise("""
     x := z;
     y := w;
     a := 0;
-    if y < 0 then{
-        while y != 0 do{
-            a := a - x;
-            y := y + 1;
-        }end
-    }else{
-        while y != 0 do{
+    if y > 0 then{
+        while y > 0 do{
             a := a + x;
             y := y - 1;
         }end
+    }else{
+        while y < 0 do{
+            a := a - x;
+            y := y + 1;
+        }end
     }end
 """)
+
+code4 = parser.program.parse_or_raise("""
+    x := 4;
+    y := 8;
+    a := 0;
+    while x > 0 do{
+    a := a + y;
+    x := x - 1;
+    }end
+    z := 0;
+    while a > z do{
+    z := z + 1;
+    a := a - 1;
+    }end
+""")
+
+code5 = parser.program.parse_or_raise("""
+    x := 4;
+    y := 8;
+    a := 0;
+    while x > 0 do{
+    a := a + y;
+    x := x - 1;
+    }end
+""")
+
+
 t = verifier.parse_as_condition("(a + (y * z)) = w*z")
-k = verifier.verify_code(code3, "a = z*w")
+k = verifier.verify_code(code5, "a > 32")
 print(k)
