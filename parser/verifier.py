@@ -18,7 +18,7 @@ def calculate_wlp(post_condition, code):
         for i in reversed(code):
             k += calculate_wlp(post_condition, i)
     elif code is None:
-        return
+        return 0
     elif 'variable' in dir(code):
         calculate_assignment_wlp(post_condition, code)
     elif 'if_true' in dir(code):
